@@ -1,0 +1,7 @@
+LONGREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
+LONGREADS: [long-read_directory]
+SHORTREADS: [short-read directory]
+SHORTREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
+PREFIX: [prefix]
+REFERENCE: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_genomic.fna.gz
+OUTDIR: [results directory]
