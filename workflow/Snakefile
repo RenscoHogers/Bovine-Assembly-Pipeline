@@ -1,0 +1,280 @@
+configfile: "../config/config.yaml"
+
+LONGREADS = config["LONGREADS"]
+LONGREAD_FILE_TYPE = config["LONGREAD_FILE_TYPE"]
+SHORTREADS = config["SHORTREADS"]
+SHORTREAD_FILE_TYPE = config["SHORTREAD_FILE_TYPE"]
+PREFIX = config["PREFIX"]
+REFERENCE = config["REFERENCE"]
+outdir = config["OUTDIR"]
+
+def check_file_type(file_type):
+    supported_file_types = {"fa","fa.gz","fasta","fasta.gz","fq","fq.gz","fastq","fastq.gz"}
+    if file_type not in supported_file_types:
+        raise ValueError("Invalid file type. Please use either fastq/fastq.gz.")
+    else:
+        return file_type.lower()
+
+try:
+    file_type = check_file_type(LONGREAD_FILE_TYPE)
+except ValueError as error:
+    raise WorkflowError(error)
+
+rule all:
+    input:
+        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, reference=REFERENCE, prefix=PREFIX)
+
+if {LONGREADS}/sequencing_summary.txt:
+    rule pycoqc:
+        message:
+            "Rule {rule} processing"
+        output:
+            "{outdir}/PycoQC/PycoQC_output.html"
+        threads: 1
+        resources:
+            mem_mb=10000,
+            time="0-0:4:0"
+        singularity:
+            "docker://robegan21/pycoqc:v2.5.2"
+        shell:
+            f"pycoQC -f {LONGREADS}/sequencing_summary.txt -o {{output}}"
+
+rule merge_long_reads:
+    message:
+        "Rule {rule} processing"
+    output:
+        f"{outdir}/temp_long_reads.{LONGREAD_FILE_TYPE.lower()}"
+    threads: 1
+    resources:
+        mem_mb=2000,
+        time="0-0:10:0"
+    shell:
+        f"cat {LONGREADS}/*.{LONGREAD_FILE_TYPE.lower()} > {{output}}"
+
+rule merge_short_reads:
+    message:
+        "Rule {rule} processing"
+    output:
+        forward_short_reads = f"{outdir}/temp_short_reads_1.{SHORTREAD_FILE_TYPE.lower()}",
+        reverse_short_reads = f"{outdir}/temp_short_reads_2.{SHORTREAD_FILE_TYPE.lower()}"
+    threads: 1
+    resources:
+        mem_mb=2000,
+        time="0-0:2:0"
+    shell:
+        f"cat {SHORTREADS}/*1.{SHORTREAD_FILE_TYPE.lower()} > {{output.forward_short_reads}} & cat {SHORTREADS}/*2.{SHORTREAD_FILE_TYPE.lower()} > {{output.reverse_short_reads}}"
+
+rule short_read_trimming:
+    message:
+        "Rule {rule} processing"
+    input:
+        forward_short_reads = rules.merge_short_reads.output.forward_short_reads,
+        reverse_short_reads = rules.merge_short_reads.output.reverse_short_reads
+    output:
+        directory("{outdir}/trimmomatic")
+    threads: 24
+    resources:
+        mem_mb=10000,
+        time="0-0:45:0"
+    singularity:
+        "docker://staphb/trimmomatic:0.39"
+    script:
+        "scripts/trimmomatic.sh"
+
+rule filter_long_reads:
+    message:
+        "Rule {rule} processing"
+    input:
+        long_reads=rules.merge_long_reads.output,
+        short_reads_dir=rules.short_read_trimming.output
+    output:
+        "{outdir}/filtlong/filtered_reads_ont.fastq.gz"
+    threads: 24
+    resources:
+        mem_mb=80000,
+        time="2-0:0:0"
+    singularity:
+        "docker://staphb/filtlong:0.2.1"
+    shell:
+        f"filtlong -1 {{input.short_reads_dir}}/forward_paired_temp_short_reads_1.fastq.gz -2 {{input.short_reads_dir}}/reverse_paired_temp_short_reads_2.fastq.gz --min_length 1000 --keep_percent 90 --trim --split 1000 {{input.long_reads}} | gzip > {{output}}"
+
+# Deprecated due to basecalling-based trimming.
+#rule long_read_trimming:
+#    message:
+#        "Rule {rule} processing"
+#    input:
+#        rules.filter_long_reads.output
+#    output:
+#        "{outdir}/porechop_abi/trimmed_reads.fastq"
+#    threads: 56
+#    resources:
+#        mem_mb=lambda wildcards, threads, attempt: 4000 * threads * attempt,
+#        time="1-6:0:0"
+#    singularity:
+#        "docker://jimmyliu1326/porechop_abi:0.5.0"
+#   shell:
+#        f"porechop_abi --ab_initio --ab_initio_config ../resources/ab_initio.config  --number_of_run 25 --consensus_run 75 --threads {{threads}} -i {{input}} -o {{output}}"
+
+rule fastqc_long:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.filter_long_reads.output
+    output:
+        directory("{outdir}/FastQC_long")
+    threads: 12
+    resources:
+        mem_mb=lambda wildcards, threads, attempt: 1000 * threads * attempt,
+        time="0-3:30:0"
+    singularity:
+        "docker://staphb/fastqc:0.12.1"
+    shell:
+        f"mkdir -p {{output}} && fastqc -o {{output}} --memory 1024 --svg -t {{threads}} {{input}}"
+
+rule fastqc_short:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.short_read_trimming.output
+    output:
+        directory("{outdir}/FastQC_short")
+    threads: 12
+    resources:
+        mem_mb=lambda wildcards, threads: 500 * threads,
+        time="0-0:12:0"
+    singularity:
+        "docker://staphb/fastqc:0.12.1"
+    shell:
+        f"mkdir -p {{output}} && fastqc -o {{output}} --svg -t {{threads}} {{input}}/*_paired_*"
+
+rule assembly:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.filter_long_reads.output
+    output:
+        directory("{outdir}/flye/")
+    threads: 64
+    resources:
+        mem_mb=400000,
+        time="0-22:0:0"
+    singularity:
+        "docker://staphb/flye:2.9.3"
+    shell:
+        f"flye --nano-hq {{input}} -o {{output}} -t {{threads}} -i 0 -g 2.8g"
+
+rule polishing:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.filter_long_reads.output,
+        rules.short_read_trimming.output,
+        rules.assembly.output
+    output:
+        "{outdir}/NextPolish/genome.nextpolish.fa"
+    threads: 64
+    resources:
+        mem_mb=lambda wildcards, threads: 7000 * threads,
+        time="1-0:0:0"
+    conda:
+        "envs/nextpolish.yaml"
+    script:
+        "scripts/NextPolish.sh"
+
+rule scaffolding:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.polishing.output
+    output:
+        directory("{outdir}/RagTag")
+    threads: 10
+    resources:
+        mem_mb=lambda wildcards, threads: 2000 * threads,
+        time="0-0:10:0"
+    singularity:
+        "docker://mcphl/ragtag:latest"
+    shell:
+        "ragtag.py scaffold {REFERENCE} {input} -t {threads} -o {output} -u"
+
+rule tetools:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.scaffolding.output
+    output:
+        ""
+    threads: 16
+    resources:
+        mem_mb=lambda wildcards, threads: 2000 * threads,
+        time="0-0:10:0"
+    container:
+        "docker://dfam/tetools:latest"
+    shell:
+        "BuildDatabase -name {prefix} {input}/ragtag.scaffold.fasta && RepeatModeler -database {prefix} -LTRStruct -threads {threads} && RepeatMasker {prefix} -lib library.fa -pa {threads} -cutoff 250 -gff -xsmall"
+
+rule busco:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.scaffolding.output
+    output:
+        directory("{outdir}/BUSCO")
+    threads: 36
+    resources:
+        mem_mb=75000,
+        time="2-0:0:0"
+    container:
+        "docker://ezlabgva/busco:v5.6.1_cv1"
+    shell:
+        "busco -c {threads} -i {input}/ragtag.scaffold.fasta --auto-lineage-euk --out_path {output} -o busco_out -m genome --download_path ../resources/busco_downloads/ --tar"
+
+rule quast:
+    message:
+        "Rule {rule} processing"
+    input:
+        scaffolding_dir=rules.scaffolding.output,
+        long_reads=rules.filter_long_reads.output,
+        short_reads_dir=rules.short_read_trimming.output
+    output:
+        directory("{outdir}/QUAST")
+    threads: 56
+    resources:
+        mem_mb=lambda wildcards, threads: 4000 * threads,
+        time="1-12:0:0"
+    singularity:
+        "docker://staphb/quast:5.2.0"
+    shell:
+        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff --k-mer-stats"
+
+rule MultiQC:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.pycoqc.output,
+        rules.fastqc_short.output,
+        rules.fastqc_long.output,
+        rules.busco.output,
+        rules.quast.output
+    output:
+        "{outdir}/MultiQC/multiqc_report.html"
+    threads: 1
+    resources:
+        mem_mb=1000,
+        time="0-0:5:0"
+    singularity:
+        "docker://staphb/multiqc:1.19"
+    shell:
+        "multiqc {input} -o {outdir}/MultiQC"
+
+rule CleanUp:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.MultiQC.output
+    threads: 1
+    resources:
+        mem_mb=1000,
+        time="0-0:5:0"
+    shell:
+        "rm -r rules.merge_long_reads.output rules.merge_short_reads.output"
