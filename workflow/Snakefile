@@ -5,7 +5,8 @@ LONGREAD_FILE_TYPE = config["LONGREAD_FILE_TYPE"]
 SHORTREADS = config["SHORTREADS"]
 SHORTREAD_FILE_TYPE = config["SHORTREAD_FILE_TYPE"]
 PREFIX = config["PREFIX"]
-REFERENCE = config["REFERENCE"]
+REFERENCE_FASTQ = config["REFERENCE_FASTQ"]
+REFERENCE_GFF = config["REFERENCE_GFF"]
 outdir = config["OUTDIR"]
 
 def check_file_type(file_type):
@@ -22,7 +23,7 @@ except ValueError as error:
 
 rule all:
     input:
-        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, reference=REFERENCE, prefix=PREFIX)
+        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, reference_FASTQ=REFERENCE_FASTQ, prefix=PREFIX)
 
 if {LONGREADS}/sequencing_summary.txt:
     rule pycoqc:
@@ -195,7 +196,7 @@ rule scaffolding:
     singularity:
         "docker://mcphl/ragtag:latest"
     shell:
-        "ragtag.py scaffold {REFERENCE} {input} -t {threads} -o {output} -u"
+        "ragtag.py scaffold {REFERENCE_FASTQ} {input} -t {threads} -o {output} -u"
 
 rule tetools:
     message:
@@ -245,7 +246,7 @@ rule quast:
     singularity:
         "docker://staphb/quast:5.2.0"
     shell:
-        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff --k-mer-stats"
+        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE_FASTQ} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features {REFERENCE_FASTQ} --k-mer-stats"
 
 rule MultiQC:
     message:
