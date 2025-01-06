@@ -4,5 +4,5 @@ SHORTREADS: [short-read directory]
 SHORTREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
 PREFIX: [prefix]
 REFERENCE_FASTQ: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_genomic.fna.gz
-REFERENCE_FASTQ: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff
+REFERENCE_GFF: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff
 OUTDIR: [results directory]
