@@ -99,23 +99,6 @@ rule filter_long_reads:
     shell:
         f"filtlong -1 {{input.short_reads_dir}}/forward_paired_temp_short_reads_1.fastq.gz -2 {{input.short_reads_dir}}/reverse_paired_temp_short_reads_2.fastq.gz --min_length 1000 --keep_percent 90 --trim --split 1000 {{input.long_reads}} | gzip > {{output}}"
 
-# Deprecated due to basecalling-based trimming.
-#rule long_read_trimming:
-#    message:
-#        "Rule {rule} processing"
-#    input:
-#        rules.filter_long_reads.output
-#    output:
-#        "{outdir}/porechop_abi/trimmed_reads.fastq"
-#    threads: 56
-#    resources:
-#        mem_mb=lambda wildcards, threads, attempt: 4000 * threads * attempt,
-#        time="1-6:0:0"
-#    singularity:
-#        "docker://jimmyliu1326/porechop_abi:0.5.0"
-#   shell:
-#        f"porechop_abi --ab_initio --ab_initio_config ../resources/ab_initio.config  --number_of_run 25 --consensus_run 75 --threads {{threads}} -i {{input}} -o {{output}}"
-
 rule fastqc_long:
     message:
         "Rule {rule} processing"
