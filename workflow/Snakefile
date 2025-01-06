@@ -12,7 +12,7 @@ outdir = config["OUTDIR"]
 def check_file_type(file_type):
     supported_file_types = {"fa","fa.gz","fasta","fasta.gz","fq","fq.gz","fastq","fastq.gz"}
     if file_type not in supported_file_types:
-        raise ValueError("Invalid file type. Please use either fastq/fastq.gz.")
+        raise ValueError("Invalid file type. Please use either 'fa','fa.gz','fasta','fasta.gz','fq','fq.gz','fastq','fastq.gz'.")
     else:
         return file_type.lower()
 
