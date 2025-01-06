@@ -38,7 +38,7 @@ if {LONGREADS}/sequencing_summary.txt:
         singularity:
             "docker://robegan21/pycoqc:v2.5.2"
         shell:
-            f"pycoQC -f {LONGREADS}/sequencing_summary.txt -o {{output}}"
+            f"pycoQC -f {LONGREADS}/basecalling_summary.tsv -o {{output}}"
 
 rule merge_long_reads:
     message:
