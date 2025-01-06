@@ -25,7 +25,7 @@ rule all:
     input:
         expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, reference_FASTQ=REFERENCE_FASTQ, prefix=PREFIX)
 
-if {LONGREADS}/sequencing_summary.txt:
+if {LONGREADS}/basecalling_summary.tsv:
     rule pycoqc:
         message:
             "Rule {rule} processing"
