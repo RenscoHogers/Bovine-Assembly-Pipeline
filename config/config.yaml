@@ -5,4 +5,8 @@ SHORTREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
 PREFIX: [prefix]
 REFERENCE_ASSEMBLY: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_genomic.fna.gz
 REFERENCE_GFF: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff.gz
+RNASEQ_IDS: "SRR5363147"
+RNASEQ_BAMS:
+PROTEIN_SEQUENCES: ../resources/protein_sequences/orthodb_vertebrate_proteins.fasta
+HINTS_FILE:
 OUTDIR: [results directory]
