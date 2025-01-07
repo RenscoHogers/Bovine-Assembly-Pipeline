@@ -1,12 +1,17 @@
 configfile: "../config/config.yaml"
 
+# Load values from config.yaml
 LONGREADS = config["LONGREADS"]
 LONGREAD_FILE_TYPE = config["LONGREAD_FILE_TYPE"]
 SHORTREADS = config["SHORTREADS"]
 SHORTREAD_FILE_TYPE = config["SHORTREAD_FILE_TYPE"]
 PREFIX = config["PREFIX"]
-REFERENCE_FASTQ = config["REFERENCE_FASTQ"]
+REFERENCE_ASSEMBLY = config["REFERENCE_ASSEMBLY"]
 REFERENCE_GFF = config["REFERENCE_GFF"]
+RNASEQ_IDS = config["RNASEQ_IDS"]
+RNASEQ_BAMS = config["RNASEQ_BAMS"]
+PROTEIN_SEQUENCES = config["PROTEIN_SEQUENCES"]
+HINTS_FILE = config["HINTS_FILE"]
 outdir = config["OUTDIR"]
 
 def check_file_type(file_type):
@@ -23,7 +28,7 @@ except ValueError as error:
 
 rule all:
     input:
-        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, reference_FASTQ=REFERENCE_FASTQ, prefix=PREFIX)
+        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, REFERENCE_ASSEMBLY=REFERENCE_ASSEMBLY, prefix=PREFIX)
 
 if {LONGREADS}/basecalling_summary.tsv:
     rule pycoqc:
@@ -179,15 +184,15 @@ rule scaffolding:
     singularity:
         "docker://mcphl/ragtag:latest"
     shell:
-        "ragtag.py scaffold {REFERENCE_FASTQ} {input} -t {threads} -o {output} -u"
+        "ragtag.py scaffold {REFERENCE_ASSEMBLY} {input} -t {threads} -o {output} -u"
 
-rule tetools:
+rule repeat_masking:
     message:
         "Rule {rule} processing"
     input:
         rules.scaffolding.output
     output:
-        ""
+        "(outdir}/RagTag/ragtag.scaffold.fasta.masked"
     threads: 16
     resources:
         mem_mb=lambda wildcards, threads: 2000 * threads,
@@ -196,6 +201,41 @@ rule tetools:
         "docker://dfam/tetools:latest"
     shell:
         "BuildDatabase -name {prefix} {input}/ragtag.scaffold.fasta && RepeatModeler -database {prefix} -LTRStruct -threads {threads} && RepeatMasker {prefix} -lib library.fa -pa {threads} -cutoff 250 -gff -xsmall"
+
+rule genome_annotation:
+    message:
+        "Rule {rule} processing"    
+    input:
+        genome=rules.repeat_masking.output,
+        rnaseq_ids= optional(RNASEQ_IDS),
+        rnaseq_bam= optional(RNASEQ_BAMS),
+        prot_seq= optional(PROTEIN_SEQUENCES),
+        hints_file= optional(HINTS_FILE)
+    output:
+        "{outdir}/BRAKER/braKER_output.gff3"
+    params:
+        species="bos_taurus",
+        threads=8,
+        resources={
+            'memory': '32G',
+            'time': '24h',
+            'cpus': 8
+        }
+    container:
+        "docker://teambraker/braker3:latest"    
+    shell:
+        """
+        braker3 \
+            --genome {input.genome} \
+            --species {params.species} \
+            --softmasking \
+            --cores {params.threads} \
+            --output {output} \
+            { '--prot_seq ' + input.prot_seq if input.prot_seq else ''} \
+            { '--rnaseq_ids ' + input.rnaseq_ids if input.rnaseq_ids else ''} \
+            { '--bam ' + input.rnaseq_bam if input.rnaseq_bam else ''} \
+            { '--hints_file ' + input.hints_file if input.hints_file else ''}
+        """
 
 rule busco:
     message:
@@ -229,7 +269,7 @@ rule quast:
     singularity:
         "docker://staphb/quast:5.2.0"
     shell:
-        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE_FASTQ} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features {REFERENCE_FASTQ} --k-mer-stats"
+        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE_ASSEMBLY} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features {REFERENCE_ASSEMBLY} --k-mer-stats"
 
 rule MultiQC:
     message:
