@@ -15,11 +15,10 @@ HINTS_FILE = config["HINTS_FILE"]
 outdir = config["OUTDIR"]
 
 def check_file_type(file_type):
-    supported_file_types = {"fa","fa.gz","fasta","fasta.gz","fq","fq.gz","fastq","fastq.gz"}
-    if file_type not in supported_file_types:
-        raise ValueError("Invalid file type. Please use either 'fa','fa.gz','fasta','fasta.gz','fq','fq.gz','fastq','fastq.gz'.")
-    else:
-        return file_type.lower()
+    supported_file_types = {"fa", "fa.gz", "fasta", "fasta.gz", "fq", "fq.gz", "fastq", "fastq.gz"}
+    if not any(file_type.lower().endswith(extension) for extension in supported_file_types):
+        raise ValueError(f"Invalid file type: {file_type}. Supported types are {', '.join(supported_file_types)}.")
+    return file_type.lower()
 
 try:
     file_type = check_file_type(LONGREAD_FILE_TYPE)
@@ -28,7 +27,8 @@ except ValueError as error:
 
 rule all:
     input:
-        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, REFERENCE_ASSEMBLY=REFERENCE_ASSEMBLY, prefix=PREFIX)
+        expand("{outdir}/MultiQC/multiqc_report.html", outdir=outdir, shortreads=SHORTREADS, longread_file_type=LONGREAD_FILE_TYPE, REFERENCE_ASSEMBLY=REFERENCE_ASSEMBLY, prefix=PREFIX),
+        "{outdir}/BRAKER/braKER_output.gff3"
 
 if {LONGREADS}/basecalling_summary.tsv:
     rule pycoqc:
@@ -49,7 +49,7 @@ rule merge_long_reads:
     message:
         "Rule {rule} processing"
     output:
-        f"{outdir}/temp_long_reads.{LONGREAD_FILE_TYPE.lower()}"
+    temp(f"{outdir}/temp_long_reads.{LONGREAD_FILE_TYPE.lower()}")
     threads: 1
     resources:
         mem_mb=2000,
@@ -61,8 +61,8 @@ rule merge_short_reads:
     message:
         "Rule {rule} processing"
     output:
-        forward_short_reads = f"{outdir}/temp_short_reads_1.{SHORTREAD_FILE_TYPE.lower()}",
-        reverse_short_reads = f"{outdir}/temp_short_reads_2.{SHORTREAD_FILE_TYPE.lower()}"
+        forward_short_reads = temp(f"{outdir}/temp_short_reads_1.{SHORTREAD_FILE_TYPE.lower()}"),
+        reverse_short_reads = temp(f"{outdir}/temp_short_reads_2.{SHORTREAD_FILE_TYPE.lower()}")
     threads: 1
     resources:
         mem_mb=2000,
@@ -102,7 +102,8 @@ rule filter_long_reads:
     singularity:
         "docker://staphb/filtlong:0.2.1"
     shell:
-        f"filtlong -1 {{input.short_reads_dir}}/forward_paired_temp_short_reads_1.fastq.gz -2 {{input.short_reads_dir}}/reverse_paired_temp_short_reads_2.fastq.gz --min_length 1000 --keep_percent 90 --trim --split 1000 {{input.long_reads}} | gzip > {{output}}"
+        shell:
+    f"filtlong -1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz -2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --min_length 1000 --keep_percent 90 --trim --split 1000 {input.long_reads} | gzip > {output}"
 
 rule fastqc_long:
     message:
@@ -148,7 +149,7 @@ rule assembly:
         mem_mb=400000,
         time="0-22:0:0"
     singularity:
-        "docker://staphb/flye:2.9.3"
+        "docker://staphb/flye:latest"
     shell:
         f"flye --nano-hq {{input}} -o {{output}} -t {{threads}} -i 0 -g 2.8g"
 
@@ -192,12 +193,12 @@ rule repeat_masking:
     input:
         rules.scaffolding.output
     output:
-        "(outdir}/RagTag/ragtag.scaffold.fasta.masked"
+        "{outdir}/RagTag/ragtag.scaffold.fasta.masked"
     threads: 16
     resources:
         mem_mb=lambda wildcards, threads: 2000 * threads,
         time="0-0:10:0"
-    container:
+    singularity:
         "docker://dfam/tetools:latest"
     shell:
         "BuildDatabase -name {prefix} {input}/ragtag.scaffold.fasta && RepeatModeler -database {prefix} -LTRStruct -threads {threads} && RepeatMasker {prefix} -lib library.fa -pa {threads} -cutoff 250 -gff -xsmall"
@@ -221,7 +222,7 @@ rule genome_annotation:
             'time': '24h',
             'cpus': 8
         }
-    container:
+    singularity:
         "docker://teambraker/braker3:latest"    
     shell:
         """
@@ -241,23 +242,23 @@ rule busco:
     message:
         "Rule {rule} processing"
     input:
-        rules.scaffolding.output
+        rules.rules.repeat_masking.output
     output:
         directory("{outdir}/BUSCO")
     threads: 36
     resources:
         mem_mb=75000,
         time="2-0:0:0"
-    container:
-        "docker://ezlabgva/busco:v5.6.1_cv1"
+    singularity:
+        "docker://ezlabgva/busco:latest"
     shell:
-        "busco -c {threads} -i {input}/ragtag.scaffold.fasta --auto-lineage-euk --out_path {output} -o busco_out -m genome --download_path ../resources/busco_downloads/ --tar"
+        "busco -c {threads} -i {input} --auto-lineage-euk --out_path {output} -o busco_out -m genome --download_path ../resources/busco_downloads/ --tar"
 
 rule quast:
     message:
         "Rule {rule} processing"
     input:
-        scaffolding_dir=rules.scaffolding.output,
+        genome=rules.repeat_masking.output,
         long_reads=rules.filter_long_reads.output,
         short_reads_dir=rules.short_read_trimming.output
     output:
@@ -267,9 +268,9 @@ rule quast:
         mem_mb=lambda wildcards, threads: 4000 * threads,
         time="1-12:0:0"
     singularity:
-        "docker://staphb/quast:5.2.0"
+        "docker://staphb/quast:latest"
     shell:
-        "quast.py {input.scaffolding_dir}/ragtag.scaffold.fasta -r {REFERENCE_ASSEMBLY} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features {REFERENCE_ASSEMBLY} --k-mer-stats"
+        "quast.py {input.genome} -r {REFERENCE_ASSEMBLY} -o {output} --threads {threads} --nanopore {input.long_reads} --pe1 {input.short_reads_dir}/forward_paired_temp_short_reads_1.fastq.gz --pe2 {input.short_reads_dir}/reverse_paired_temp_short_reads_2.fastq.gz --eukaryote --large --gene-finding --rna-finding --est-ref-size 2770686120 --features {REFERENCE_ASSEMBLY} --k-mer-stats"
 
 rule MultiQC:
     message:
@@ -287,18 +288,6 @@ rule MultiQC:
         mem_mb=1000,
         time="0-0:5:0"
     singularity:
-        "docker://staphb/multiqc:1.19"
+        "docker://multiqc/multiqc:latest"
     shell:
         "multiqc {input} -o {outdir}/MultiQC"
-
-rule CleanUp:
-    message:
-        "Rule {rule} processing"
-    input:
-        rules.MultiQC.output
-    threads: 1
-    resources:
-        mem_mb=1000,
-        time="0-0:5:0"
-    shell:
-        "rm -r rules.merge_long_reads.output rules.merge_short_reads.output"
