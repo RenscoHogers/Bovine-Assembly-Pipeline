@@ -5,7 +5,7 @@ Make sure they are downloaded in the following location:
 Bovine-Assembly-Pipeline/resources/genomes/
 Other references can be used, but make sure to update their location/name in the config file.
 
-Pipeline can be run from the main directory using the following command:
+Pipeline can be run from the workflow directory using the following command:
 snakemake --profile myprofile
 Profiles are found in the following directory on your device:
 ~/.config/snakemake/
@@ -40,3 +40,15 @@ use-conda: true
 conda-frontend: mamba
 use-singularity: true
 singularity-args: "--bind /lustre/nobackup/WUR/ABGC/"
+
+
+If the optional genome annotation is used, be mindful to select your own data in the config file.
+If no RNA-Seq is available, it is recommended to use the data associated with the ARS-UCD2.0 genome assembly.
+Which can be downloaded using the following links:
+https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR5363147&display=download (RNA-Seq).
+The RNA-Seq data can be downloaded and used locally, but if it is found in the SRA (NCBI) databases, it can be used directly without downloading.
+The SRA_ID for the RNA-Seq of ARS-UCD2.0 is provided in the workflow, so if you use your own data please adjust the workflow file accordingly.
+
+
+For protein hints an own database can be used, but OrthoDB is recommended. There are several clades available, recommended is to use vertebrata:
+https://bioinf.uni-greifswald.de/bioinf/partitioned_odb12/Vertebrata.fa.gz.
