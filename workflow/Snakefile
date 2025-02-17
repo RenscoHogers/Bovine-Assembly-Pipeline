@@ -33,7 +33,7 @@ except ValueError as error:
 rule all:
     input:
         f"{OUTDIR}/MultiQC/multiqc_report.html",
-        f"{OUTDIR}/BRAKER/BRAKER_output.gff3"
+        f"{OUTDIR}/BRAKER/braker.gff3"
 
 rule pycoQC:
     message:
