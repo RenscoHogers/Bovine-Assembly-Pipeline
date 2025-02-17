@@ -248,7 +248,7 @@ rule Genome_annotation:
         genome = rules.Repeat_masking.output,
         prot_seq = PROTEIN_SEQUENCES,
     output:
-        "{OUTDIR}/BRAKER/BRAKER_output.gff3"
+        "{OUTDIR}/BRAKER/braker.gff3"
     log:
         "{OUTDIR}/BRAKER/BRAKER.out"
     threads: 8
@@ -268,7 +268,7 @@ rule Genome_annotation:
             --threads={threads} \
             --rnaseq_sets_ids {RNASEQ} \
             --gff3 \
-            --workingdir={output} \
+            --workingdir={OUTDIR}/BRAKER/ \
             --useexisting \
             --AUGUSTUS_CONFIG_PATH={BRAKER_CONFIG}
         """
