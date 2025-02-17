@@ -68,8 +68,8 @@ rule Merge_long_reads:
     threads: 1
     resources:
         cpus_per_task = 1,
-        mem_mb = 500,
-        runtime = "5m"
+        mem_mb = 10000,
+        runtime = "10m"
     shell:
         f"cat {LONGREADS}/*.{LONGREAD_FILE_TYPE.lower()} > {{output}}"
 
