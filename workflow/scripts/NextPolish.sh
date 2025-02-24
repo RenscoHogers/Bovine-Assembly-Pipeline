@@ -93,5 +93,8 @@ for ((round=1; round<="${round_count}";round++)); do
     done
 done
 
+# Bgzip the final output file.
+bgzip -@ "${threads}" "${input}" > "${input}.gz"
+
 # Remove intermediate files.
 cleanup
