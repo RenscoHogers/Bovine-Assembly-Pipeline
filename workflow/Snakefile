@@ -6,6 +6,7 @@ LONGREAD_FILE_TYPE = config["LONGREAD_FILE_TYPE"]
 SHORTREADS = config["SHORTREADS"]
 SHORTREAD_FILE_TYPE = config["SHORTREAD_FILE_TYPE"]
 PREFIX = config["PREFIX"]
+FASTIX_LOCATION = config["FASTIX_LOCATION"]
 REFERENCE_ASSEMBLY = config["REFERENCE_ASSEMBLY"]
 REFERENCE_GFF = config["REFERENCE_GFF"]
 RNASEQ = config["RNASEQ"]
@@ -47,8 +48,8 @@ rule pycoQC:
     threads: 1
     resources:
         cpus_per_task = 1,
-        mem_mb = 5000,
-        runtime = "3m"
+        mem_mb = 7500,
+        runtime = "5m"
     container:
         "docker://robegan21/pycoqc:v2.5.2"
     shell:
@@ -82,7 +83,7 @@ rule Merge_short_reads:
     threads: 1
     resources:
         cpus_per_task = 1,
-        mem_mb = 1000,
+        mem_mb = 2000,
         runtime = "10m"
     shell:
         f"""
@@ -102,7 +103,7 @@ rule Short_read_trimming:
     resources:
         cpus_per_task = 48,
         mem_mb = 6000,
-        runtime = "40m"
+        runtime = "90m"
     container:
         "docker://staphb/trimmomatic:0.39"
     script:
@@ -119,7 +120,7 @@ rule Filter_long_reads:
     threads: 1
     resources:
         mem_mb = 8000,
-        runtime = "8h"
+        runtime = "10h"
     container:
         "docker://staphb/filtlong:0.2.1"
     shell:
@@ -138,7 +139,7 @@ rule FastQC_long:
         "{OUTDIR}/FastQC_long/FastQC_long.out"
     threads: 12
     resources:
-        mem_mb = 8000,
+        mem_mb = 10000,
         runtime = "2h"
     container:
         "docker://staphb/fastqc:0.12.1"
@@ -173,7 +174,7 @@ rule Assembly:
     threads: 64
     resources:
         mem_mb = 300000,
-        runtime = "16h"
+        runtime = "1d"
     container:
         "docker://staphb/flye:latest"
     shell:
@@ -187,13 +188,11 @@ rule Polishing:
         rules.Short_read_trimming.output,
         rules.Assembly.output
     output:
-        "{OUTDIR}/NextPolish/genome.nextpolish.fa"
-    log:
-        "{OUTDIR}/NextPolish/NextPolish.out"
+        "{OUTDIR}/NextPolish/genome.nextpolish.fa.gz"
     threads: 64
     resources:
-        mem_mb = 175000,
-        runtime = "20h"
+        mem_mb = 410000,
+        runtime = "3d"
     conda:
         "envs/nextpolish.yaml"
     script:
@@ -210,34 +209,54 @@ rule Scaffolding:
         "{OUTDIR}/RagTag/RagTag.out"
     threads: 24
     resources:
-        mem_mb = 12500,
-        runtime = "3m"
+        mem_mb = 25000,
+        runtime = "5m"
     container:
         "docker://mcphl/ragtag:latest"
     shell:
-        "ragtag.py scaffold {REFERENCE_ASSEMBLY} {input} -t {threads} -o {OUTDIR}/RagTag/ -u >& {log}"
+        """
+        ragtag.py scaffold {REFERENCE_ASSEMBLY} {input} -t {threads} -o {OUTDIR}/RagTag/ -u >& {log}
+        """
+
+rule PanSN_spec_compliance:
+    message:
+        "Rule {rule} processing"
+    input:
+        rules.Scaffolding.output
+    output:
+        "{OUTDIR}/Genome/scaffolded_genome.fasta"
+    threads: 1
+    resources:
+        mem_mb = 10000,
+        runtime = "2m"
+    shell:
+        """
+        {FASTIX_LOCATION} -p "{PREFIX}#1#" {input} > {output}
+        """
 
 rule Repeat_masking:
     message:
         "Rule {rule} processing"
     input:
-        scaffolded_genome = "{OUTDIR}/RagTag/ragtag.scaffold.fasta"
+        rules.PanSN_spec_compliance.output
     output:
-        "{OUTDIR}/RagTag/ragtag.scaffold.fasta.masked"
+        "{OUTDIR}/Genome/scaffolded_genome.fasta.masked"
     log:
-        "{OUTDIR}/RagTag/Repeat_masking.out"
+        "{OUTDIR}/Genome/Repeat_masking.out"
     threads: 32
     resources:
         mem_mb = 50000,
-        runtime = "28h"
+        runtime = "3d"
     container:
         "docker://dfam/tetools:latest"
+    params:
+        prefix = PREFIX
     shell:
         """
-        cd {OUTDIR}/RagTag && \
-        BuildDatabase -name {PREFIX} {input.scaffolded_genome} && \
-        RepeatModeler -database {PREFIX} -LTRStruct -threads {threads} && \
-        RepeatMasker -lib {PREFIX}-families.fa -pa {threads} -cutoff 250 -gff -xsmall {input.scaffolded_genome} \
+        cd {OUTDIR}/Genome && \
+        BuildDatabase -name {params.prefix} {input} && \
+        RepeatModeler -database {params.prefix} -LTRStruct -threads {threads} && \
+        RepeatMasker -lib {params.prefix}-families.fa -pa {threads} -cutoff 250 -gff -xsmall {input} \
         >& {log}
         """
 
@@ -308,7 +327,7 @@ rule QUAST:
     threads: 56
     resources:
         mem_mb = 350000,
-        runtime = "35h"
+        runtime = "50h"
     container:
         "docker://staphb/quast:latest"
     shell:
