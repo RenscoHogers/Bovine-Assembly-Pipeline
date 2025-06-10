@@ -1,11 +1,21 @@
-LONGREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
-LONGREADS: [long-read_directory]
-SHORTREADS: [short-read directory]
-SHORTREAD_FILE_TYPE: [fa/fa.gz/fasta/fasta.gz/fq/fq/gz/fastq/fastq.gz]
-PREFIX: [prefix]
-REFERENCE_ASSEMBLY: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_genomic.fna.gz
-REFERENCE_GFF: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff.gz
-RNASEQ: SRR5363147
-PROTEIN_SEQUENCES: ../resources/BRAKER/Vertebrate.fa
-BRAKER_CONFIG: ../resources/BRAKER/config/
-OUTDIR: [results directory]
+input_data:
+  LONGREADS: [long-read_directory]
+  SHORTREADS: [short-read directory]
+  RNASEQ: SRR5363147
+
+file_types:
+  LONGREAD_FILE_TYPE: [fa, fa.gz, fasta, fasta.gz, fq, fq.gz, fastq, fastq.gz]
+  SHORTREAD_FILE_TYPE: [fa, fa.gz, fasta, fasta.gz, fq, fq.gz, fastq, fastq.gz]
+
+reference_files:
+  REFERENCE_ASSEMBLY: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_genomic.fna.gz
+  REFERENCE_GFF: ../resources/genomes/GCF_002263795.3_ARS-UCD2.0_annotation.gff.gz
+  PROTEIN_SEQUENCES: ../resources/BRAKER/Vertebrate.fa
+
+tools_and_config:
+  FASTIX_LOCATION: [FASTIX directory]
+  BRAKER_CONFIG: ../resources/BRAKER/config/
+
+output_settings:
+  OUTDIR: [results directory]
+  PREFIX: [prefix]
